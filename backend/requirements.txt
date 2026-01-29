@@ -1,0 +1,10 @@
+fastapi==0.115.0
+uvicorn==0.32.0
+librosa==0.10.2
+anthropic==0.39.0
+python-multipart==0.0.12
+numpy>=2.0.0
+scipy>=1.14.0
+python-dotenv==1.0.1
+numba==0.60.0
+soundfile==0.12.1

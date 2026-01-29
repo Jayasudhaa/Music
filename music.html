@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Carnatic Swara Analyzer – 3 Octaves (Stable)</title>
+
+<style>
+body { background:#0b0b0b; color:#fff; font-family:Arial; text-align:center; }
+canvas { background:#000; border:2px solid #333; border-radius:10px; }
+button, select {
+  padding:10px 14px; margin:6px;
+  font-size:15px; border-radius:8px; border:none;
+}
+.green{background:#2ecc71;}
+.red{background:#e74c3c;color:white;}
+.blue{background:#3498db;color:white;}
+#live { font-size:42px; color:#00ff99; margin-top:8px; }
+</style>
+</head>
+
+<body>
+
+<h2>🎼 Carnatic Swara Pitch Analyzer (3 Octaves)</h2>
+
+Shruthi:
+<select id="shruti" onchange="setShruti()">
+<option>C</option><option>C#</option><option>D</option><option>D#</option>
+<option>E</option><option>F</option><option>F#</option>
+<option>G</option><option>G#</option>
+<option>A</option><option>A#</option>
+<option selected>B</option>
+</select>
+
+<br>
+
+<button class="green" onclick="start()">▶ Start</button>
+<button class="red" onclick="stop()">⏹ Stop</button>
+
+<br><br>
+
+<canvas id="c" width="1000" height="640"></canvas>
+
+<div id="live">—</div>
+
+<script>
+const canvas = document.getElementById("c");
+const g = canvas.getContext("2d");
+
+let ctx, analyser, mic, raf;
+let SA = 246.94;
+
+const MIN_RMS = 0.015;
+const MAX_JUMP = 3;
+let lastIndex = null;
+
+let swaraData = [];
+
+const SHRUTI = {
+"C":261.63,"C#":277.18,"D":293.66,"D#":311.13,
+"E":329.63,"F":349.23,"F#":369.99,
+"G":392,"G#":415.3,"A":440,"A#":466.16,"B":493.88
+};
+
+const RATIOS = [1,9/8,5/4,4/3,3/2,5/3,15/8];
+const NAMES = ["Sa","Ri","Ga","Ma","Pa","Da","Ni"];
+
+function setShruti(){
+  SA = SHRUTI[document.getElementById("shruti").value] / 2;
+}
+
+function autocorrelate(buf, sr){
+  let best = 0, bestLag = 0;
+  for(let lag=80; lag<900; lag++){
+    let sum=0;
+    for(let i=0;i<900;i++) sum += buf[i]*buf[i+lag];
+    if(sum>best){ best=sum; bestLag=lag; }
+  }
+  return bestLag ? sr/bestLag : null;
+}
+
+function freqToIndex(freq){
+  let best=null, bestC=1e9;
+  for(let o=-1;o<=1;o++){
+    for(let i=0;i<7;i++){
+      const f = SA * RATIOS[i] * Math.pow(2,o);
+      const c = Math.abs(1200*Math.log2(freq/f));
+      if(c < bestC){
+        bestC=c;
+        best = 7*(o+1)+i;
+      }
+    }
+  }
+  return best;
+}
+
+function drawAxis(){
+  g.font="14px Arial";
+  g.fillStyle="#aaa";
+  g.strokeStyle="#222";
+  g.textAlign="right";
+
+  const total = 21;
+  const step = canvas.height / total;
+
+  let labels=[];
+  for(let o=1;o>=-1;o--){
+    for(let i=6;i>=0;i--){
+      let s=NAMES[i];
+      if(o===1) s+="+";
+      if(o===-1) s+="-";
+      labels.push(s);
+    }
+  }
+
+  labels.forEach((l,i)=>{
+    const y=i*step+step/2;
+    g.beginPath();
+    g.moveTo(70,y);
+    g.lineTo(canvas.width,y);
+    g.stroke();
+    g.fillText(l,65,y+5);
+  });
+}
+
+function drawGraph(){
+  const step = canvas.height / 21;
+  g.strokeStyle="#00ff99";
+  g.lineWidth=2;
+  g.beginPath();
+
+  swaraData.slice(-900).forEach((v,i)=>{
+    const x=i*(canvas.width/900);
+    const y=canvas.height-(v+0.5)*step;
+    if(i===0) g.moveTo(x,y);
+    else g.lineTo(x,y);
+  });
+  g.stroke();
+}
+
+async function start(){
+  swaraData=[];
+  lastIndex=null;
+
+  ctx=new AudioContext();
+  const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+  mic=ctx.createMediaStreamSource(stream);
+  analyser=ctx.createAnalyser();
+  analyser.fftSize=2048;
+  mic.connect(analyser);
+  loop();
+}
+
+function loop(){
+  const buf=new Float32Array(analyser.fftSize);
+  analyser.getFloatTimeDomainData(buf);
+
+  // RMS silence detection
+  let rms=0;
+  for(let i=0;i<buf.length;i++) rms+=buf[i]*buf[i];
+  rms=Math.sqrt(rms/buf.length);
+
+  if(rms < MIN_RMS){
+    raf=requestAnimationFrame(loop);
+    return;
+  }
+
+  const f = autocorrelate(buf, ctx.sampleRate);
+  if(!f || f<80 || f>1500){
+    raf=requestAnimationFrame(loop);
+    return;
+  }
+
+  const idx = freqToIndex(f);
+  if(idx!==null){
+    if(lastIndex===null || Math.abs(idx-lastIndex)<=MAX_JUMP){
+      swaraData.push(idx);
+      lastIndex = idx;
+
+      const o = Math.floor(idx/7)-1;
+      const n = NAMES[idx%7];
+      document.getElementById("live").innerText =
+        n + (o>0?"+":o<0?"-":"");
+    }
+  }
+
+  g.clearRect(0,0,canvas.width,canvas.height);
+  drawAxis();
+  drawGraph();
+
+  raf=requestAnimationFrame(loop);
+}
+
+function stop(){
+  cancelAnimationFrame(raf);
+  if(ctx) ctx.close();
+}
+</script>
+
+</body>
+</html>
