@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Shruthi Guru
 
 AI-based shruthi analysis app that acts like a live Carnatic music teacher.
@@ -41,3 +42,7 @@ These are the most practical math/audio libraries to start shruthi detection:
 - Improve tonic detection (Sa) using histogram-based pitch clustering.
 - Add Clerk JWT validation in the API.
 - Store analysis history in a database (Postgres on RDS).
+=======
+# Music
+shruthi detection
+>>>>>>> ae9cf2e9c5aeb8711a6498adac29b07e46657517
